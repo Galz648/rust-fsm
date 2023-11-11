@@ -17,19 +17,10 @@ Green -> Red
 
 impl Fsm {
     fn is_valid_transition(&self, transition: &Transition) -> bool {
-        let mut response = false;
-        // TODO: reimplement this, the if expression implementation is messy
-        for valid_transition in &self.valid_transitions {
-            let start_state = &valid_transition.start_state;
-            let end_state = &valid_transition.end_state;
-
-            // wondering why I need to dereference here -
-            // Could I create an implementation of partialEq to handle references ?
-            if (transition.start_state == *start_state) && (transition.end_state == *end_state) {
-                response = true;
-            }
-        }
-        response
+        self.valid_transitions.iter().any(|valid_transition| {
+            transition.start_state == valid_transition.start_state
+                && transition.end_state == valid_transition.end_state
+        })
     }
 }
 
