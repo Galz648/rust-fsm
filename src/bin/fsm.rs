@@ -24,7 +24,6 @@ impl Fsm {
     }
 }
 
-#[derive(PartialEq)]
 struct Transition {
     start_state: State,
     end_state: State,
