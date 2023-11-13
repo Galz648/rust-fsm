@@ -9,64 +9,68 @@
         * refactor the "perform action" to be an implementation of the Oven struct
         * panic/err handle on the println!("Raise error") line
         * add tests for the different cases of the controller
-        * add proportional power usage (is this needed to become a "p controller"?)
+        * add p optimization
         * use an fsm to control (is this nicer to use ? )
 */
 
+const HEAT_LOSS_PER_STEP: f32 = 0.5;
 #[derive(Debug)]
-
 struct Oven {
-    desired_temperature: i32,
-    current_temperature: i32,
+    desired_temperature: f32,
+    current_temperature: f32,
     on: bool,
-    power: u32,
+    power: f32,
 }
 
+impl Oven {
+    fn perform_action(&mut self, action: &Option<Action>) {
+        match action {
+            Some(v) => {
+                match v {
+                    Action::HEAT => {
+                        let error = self.desired_temperature - self.current_temperature; // this is positive since the action is "HEAT"
+                        self.power = error;
+                        self.heat();
+                    }
+                    Action::NOTHING => {
+                        self.on = false;
+                        self.current_temperature -= HEAT_LOSS_PER_STEP;
+                    }
+                }
+            }
+            None => {
+                println!("Raise error");
+            } // TODO: unexpected functionality error
+        }
+    }
+
+    fn heat(&mut self) {
+        self.on = true;
+        self.current_temperature += self.power;
+    }
+}
 #[derive(Debug)]
 enum Action {
     NOTHING,
     HEAT,
 }
-fn action_to_perform(current_temperature: i32, desired_temperature: i32) -> Action {
-    if current_temperature > desired_temperature {
+fn action_to_perform(current_temperature: f32, desired_temperature: f32) -> Action {
+    if current_temperature >= desired_temperature {
         return Action::NOTHING;
     } else {
         Action::HEAT
     }
 }
 
-fn perform_action(action: Option<Action>, oven: &mut Oven) -> &mut Oven {
-    match action {
-        Some(v) => {
-            match v {
-                Action::HEAT => {
-                    // let error: i32 = oven.current_temperature - oven.desired_temperature; // should this be absolute?
-                    oven.on = true;
-                    oven.current_temperature += 1;
-                    // return oven
-                }
-                Action::NOTHING => {
-                    oven.on = false;
-                    oven.current_temperature -= 1;
-                }
-            }
-            oven
-        }
-        None => {
-            println!("Raise error");
-            return oven;
-        } // TODO: unexpected functionality error
-    }
-}
 fn main() {
     println!("Nothing to see here!");
     let mut time_step = 0;
     let mut action: Option<Action> = None;
     let mut oven = Oven {
-        desired_temperature: 30,
-        current_temperature: 20,
+        desired_temperature: 30.0,
+        current_temperature: 20.0,
         on: false,
-        power: 1,
+        power: 1.0,
     };
 
     loop {
@@ -78,8 +82,12 @@ fn main() {
             oven.desired_temperature,
         ));
         // perform action
-        perform_action(action, &mut oven);
+        oven.perform_action(&action);
 
-        println!("oven: {:?}", oven)
+        println!(
+            "timestep: {:?} | action: {:?} | oven: {:?}",
+            time_step, &action, oven
+        );
+        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 }
