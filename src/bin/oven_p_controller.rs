@@ -16,11 +16,8 @@
     features to implement:
         * Create components and a controller
         * integrate the approximation of the derivative component
-        * panic/err handle on the println!("Raise error") line
-        * add tests for the different cases of the controller
-        * add p optimization
-        * use an fsm to control (is this nicer to use ? ) - this is a good idea if there are many states to manage
 */
+use rand::Rng;
 
 const HEAT_LOSS_PER_STEP: f32 = 0.5;
 #[derive(Debug)]
@@ -33,17 +30,15 @@ struct Oven {
 impl Oven {
     fn perform_action(&mut self, action: &Option<Action>) {
         match action {
-            Some(v) => {
-                match v {
-                    Action::HEAT(power) => {
-                        self.heat(*power);
-                    }
-                    Action::NOTHING => {
-                        self.on = false;
-                        self.current_temperature -= HEAT_LOSS_PER_STEP; // TODO: move to process
-                    }
+            Some(v) => match v {
+                Action::HEAT(power) => {
+                    self.heat(*power);
                 }
-            }
+                Action::NOTHING => {
+                    self.power = 0.0;
+                    self.on = false;
+                }
+            },
             None => {
                 println!("Raise error");
             } // TODO: unexpected functionality error
@@ -63,7 +58,6 @@ enum Action {
     HEAT(f32),
 }
 
-
 fn main() {
     // e(t+h)- e(t) / h, h -> 0. This is the derivative of e(x) at x.
 
@@ -80,25 +74,42 @@ fn main() {
     };
     let mut error: f32;
     const SETPOINT: f32 = 30.0;
-    let controller = Controller {};
+
+    // intialize pid values
+    let mut controller = Controller {
+        states: Vec::new(),
+        p_error: 0.0,
+        d_error: 0.0,
+        i_error: 0.0,
+        k_p: 1.0,
+        k_i: 1.0,
+        k_d: 1.0,
+    };
+
+    controller.states.push(0.); // add a first state to the controller for the derivative calculation
     loop {
         // increment the timestep
         time_step += 1;
         // translate time_step into time
-        t = t_inc * time_step as f32; // wtf is this conversion
+        // t = t_inc * time_step as f32; // wtf is this conversion
 
         // read the temperature from the sensor
         // calculate error
         error = calculate_error(SETPOINT, oven.current_temperature);
 
+        // add error to states history
+        controller.states.push(error);
+
         // decide what action to take
-        let action = controller.choose_action(error);
+        let action = controller.choose_action(&error);
 
         // perform action
         oven.perform_action(&action);
+        oven.process();
+
         println!(
-            "timestep: {:?} | action: {:?} | oven: {:?} |  error: {:?}",
-            time_step, &action, oven, error
+            "timestep: {:?} | action: {:?} | oven: {:?} |  error: {:?} | d_error: {:?}",
+            time_step, &action, oven, error, controller.d_error
         );
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
@@ -108,16 +119,66 @@ fn calculate_error(setpoint: f32, current_temperature: f32) -> f32 {
     return setpoint - current_temperature;
 }
 
-fn process() {
-    // adds noise to the controlled variable
+impl Oven {
+    fn process(&mut self) {
+        if self.on {
+            let noise = rand::thread_rng().gen_range(-1.0..1.0); // generate noise
+            self.current_temperature += self.power + noise;
+        } else {
+            self.current_temperature -= HEAT_LOSS_PER_STEP;
+        }
+    }
 }
-struct Controller {}
+struct Controller {
+    states: Vec<f32>,
+    p_error: f32,
+    d_error: f32,
+    i_error: f32,
+    k_p: f32,
+    k_d: f32,
+    k_i: f32,
+}
+
 impl Controller {
-    fn choose_action(&self, error: f32) -> Option<Action> {
-        if error > 0.0 {
-            return Some(Action::HEAT(error))
+    fn calculate_control_output(&self, error: &f32, d_error: &f32) -> f32 {
+        let mut output: f32 = 0.0;
+        output += self.k_p* error;
+        output += self.k_d * d_error;
+
+        output
+    }
+    fn choose_action(&mut self, error: &f32) -> Option<Action> {
+        // calculate the derivative of the error
+        let d_error = &mut self.calculate_derivative_error(error);
+        self.d_error = *d_error;
+        let control_output = self.calculate_control_output(&error, &d_error);
+        // decide the action to take based on the control output
+
+        if control_output > 0.0 {
+            return Some(Action::HEAT(control_output));
         } else {
             return Some(Action::NOTHING);
         }
     }
+
+    fn last_state(&self) -> f32 {
+        // return the last state
+        match self.states.last() {
+            //I know this to be true because It's initalized with one element
+            Some(s) => {
+                return *s;
+            }
+            None => {
+                // raise error
+                panic!("No state found")
+            }
+        }
+    }
+
+    fn calculate_derivative_error(&mut self, current_error: &f32) -> f32 {
+        let error_derivative = current_error - self.last_state();
+        error_derivative // No need to divide by time if it's always 1
+    }
 }
+
+// unit tests

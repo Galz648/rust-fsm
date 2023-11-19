@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 gymnasium = { git = "https://github.com/AndrejOrsula/gymnasium_rs.git" }
+rand = "0.8.5"
